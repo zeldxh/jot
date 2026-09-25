@@ -4,6 +4,8 @@ A tiny, native notepad for Windows. Minimal, translucent, Markdown-friendly, sty
 [Alacritty](https://alacritty.org) palette. Written in Rust with [egui](https://github.com/emilk/egui).
 
 - Borderless window with a thin title bar and adjustable **translucency**
+- **Tabs** in the title bar (like WezTerm): several files in one window, hidden when only one is open
+- A **keybinds overlay** on `F1`
 - **Line numbers**, **word wrap** (on by default, toggleable), any installed **font** at any size
 - **Live Markdown**: `# Title` is a big heading as you type, plus bold, italic, code, quotes, lists, tasks, links
 - **Focus mode**: chrome hidden, centered column, everything but the current paragraph dimmed
@@ -19,7 +21,11 @@ choose **More info**, then **Run anyway**.
 
 | Key | Action |
 |---|---|
-| `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+N` | Open, save, save as, new |
+| `Ctrl+T` / `Ctrl+N`, `Ctrl+W` | New tab, close tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab`, `Alt+1` to `Alt+9` | Next / previous tab, go to tab |
+| `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | Open file(s) in tabs, save, save as |
+| `F1` | Show all keybinds |
+| `Ctrl+Shift+B` | Tab bar: auto, always, never |
 | `Ctrl+F`, `F3` / `Shift+F3` | Find, next / previous match |
 | `Alt+Z` | Toggle word wrap |
 | `Ctrl+Shift+F` (`Esc` to leave) | Focus mode |
@@ -41,6 +47,7 @@ font_size = 18.0
 opacity = 0.92                        # 0.3 to 1.0
 word_wrap = true
 line_numbers = true
+tab_bar = "auto"                     # auto (only with 2+ files), always, never
 focus_column = 72.0                   # focus mode width in characters
 ```
 
@@ -49,7 +56,7 @@ focus_column = 72.0                   # focus mode width in characters
 Needs Rust (MSVC toolchain) and the Visual Studio Build Tools.
 
 ```powershell
-cargo run --release -- notes.md
+cargo run --release -- notes.md todo.md   # every file opens in its own tab
 pwsh ./scripts/install.ps1     # release build -> %LOCALAPPDATA%\Programs\jot + Start Menu shortcut
 ```
 
