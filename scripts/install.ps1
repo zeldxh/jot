@@ -17,6 +17,7 @@ $shell = New-Object -ComObject WScript.Shell
 $sc = $shell.CreateShortcut($lnk)
 $sc.TargetPath = Join-Path $dest 'jot.exe'
 $sc.WorkingDirectory = $dest
+$sc.IconLocation = "$(Join-Path $dest 'jot.exe'),0"
 $sc.Save()
 
 Write-Host "Installed to $dest"
