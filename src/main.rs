@@ -5,6 +5,7 @@ mod app;
 mod config;
 mod fonts;
 mod highlight;
+mod icon;
 mod md;
 mod text_util;
 
@@ -12,7 +13,6 @@ use eframe::egui;
 
 fn main() -> eframe::Result {
     let file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
-    let cfg = config::Config::load();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -21,9 +21,9 @@ fn main() -> eframe::Result {
             .with_min_inner_size([320.0, 200.0])
             .with_decorations(false)
             .with_transparent(true)
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_icon(icon::window_icon()),
         ..Default::default()
     };
-    let _ = cfg;
     eframe::run_native("jot", options, Box::new(move |cc| Ok(Box::new(app::Jot::new(cc, file.clone())))))
 }
