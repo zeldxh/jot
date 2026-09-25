@@ -17,9 +17,12 @@ fn main() -> eframe::Result {
     let file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
 
     // DirectX 12 only: skips loading the Vulkan drivers, which saves memory and startup time.
+    // The DirectComposition swapchain is required for a translucent window: the default
+    // HWND swapchain ignores alpha and shows an opaque, darkened background instead.
     let mut wgpu_options = WgpuConfiguration::default();
     if let WgpuSetup::CreateNew(setup) = &mut wgpu_options.wgpu_setup {
         setup.instance_descriptor.backends = wgpu::Backends::DX12;
+        setup.instance_descriptor.backend_options.dx12.presentation_system = wgpu::Dx12SwapchainKind::DxgiFromVisual;
     }
 
     let options = eframe::NativeOptions {
