@@ -69,14 +69,14 @@ impl Builder {
 
 pub fn tokenize(text: &str) -> Vec<Span> {
     let mut b = Builder { spans: Vec::new(), cursor: 0, line_start: 0 };
-    let mut in_fence = false;
+    let mut fence: Option<(u8, usize)> = None;
     let mut offset = 0;
 
     for raw in text.split_inclusive('\n') {
         b.line_start = offset;
         let content_len = raw.trim_end_matches(['\n', '\r']).len();
         let content = &raw[..content_len];
-        line(content, offset, &mut in_fence, &mut b);
+        line(content, offset, &mut fence, &mut b);
         // Plain text left over at the end of the line, then the line break itself.
         if b.cursor < offset + content_len {
             let rest = b.cursor..offset + content_len;
@@ -88,22 +88,35 @@ pub fn tokenize(text: &str) -> Vec<Span> {
     b.spans
 }
 
-fn line(s: &str, base: usize, in_fence: &mut bool, b: &mut Builder) {
+fn line(s: &str, base: usize, fence: &mut Option<(u8, usize)>, b: &mut Builder) {
     if s.is_empty() {
         return;
     }
     let trimmed = s.trim_start();
     let indent = s.len() - trimmed.len();
 
-    // Fenced code blocks.
-    if indent <= 3 && (trimmed.starts_with("```") || trimmed.starts_with("~~~")) {
-        *in_fence = !*in_fence;
-        b.push(base..base + s.len(), Kind::Marker, 0);
+    // Fenced code blocks. Inside one, only a matching fence line closes it.
+    if let Some((ch, len)) = *fence {
+        let run = trimmed.bytes().take_while(|&c| c == ch).count();
+        if indent <= 3 && run >= len && trimmed[run..].trim().is_empty() {
+            *fence = None;
+            b.push(base..base + s.len(), Kind::Marker, 0);
+        } else {
+            b.push(base..base + s.len(), Kind::CodeBlock, 0);
+        }
         return;
     }
-    if *in_fence {
-        b.push(base..base + s.len(), Kind::CodeBlock, 0);
-        return;
+    if indent <= 3 {
+        for ch in [b'`', b'~'] {
+            let run = trimmed.bytes().take_while(|&c| c == ch).count();
+            // A backtick fence's info string cannot contain backticks: ```js code``` is inline code.
+            let opens = run >= 3 && !(ch == b'`' && trimmed[run..].contains('`'));
+            if opens {
+                *fence = Some((ch, run));
+                b.push(base..base + s.len(), Kind::Marker, 0);
+                return;
+            }
+        }
     }
 
     // ATX headings.
@@ -203,14 +216,27 @@ fn inline(s: &str, base: usize, b: &mut Builder) {
                 }
             }
             b'`' => {
-                if let Some(rel) = s[i + 1..].find('`').filter(|&r| r > 0) {
-                    let close = i + 1 + rel;
-                    b.push(base + i..base + i + 1, Kind::Marker, 0);
-                    b.push(base + i + 1..base + close, Kind::Code, 0);
-                    b.push(base + close..base + close + 1, Kind::Marker, 0);
-                    i = close + 1;
-                } else {
-                    i += 1;
+                // A code span opens with a run of N backticks and closes with the next run of exactly N.
+                let n = bytes[i..].iter().take_while(|&&c| c == b'`').count();
+                let mut from = i + n;
+                let mut close = None;
+                while let Some(rel) = s[from..].find('`') {
+                    let k = from + rel;
+                    let run = bytes[k..].iter().take_while(|&&c| c == b'`').count();
+                    if run == n {
+                        close = Some(k);
+                        break;
+                    }
+                    from = k + run;
+                }
+                match close.filter(|&k| k > i + n) {
+                    Some(k) => {
+                        b.push(base + i..base + i + n, Kind::Marker, 0);
+                        b.push(base + i + n..base + k, Kind::Code, 0);
+                        b.push(base + k..base + k + n, Kind::Marker, 0);
+                        i = k + n;
+                    }
+                    None => i += n,
                 }
             }
             b'*' | b'_' | b'~' => {
@@ -370,6 +396,51 @@ mod tests {
         assert_eq!(v[0], (Kind::Marker, "```rs"));
         assert!(v.contains(&(Kind::CodeBlock, "let x = **1**;")));
         assert_eq!(*v.last().unwrap(), (Kind::Text, "after"));
+    }
+
+    #[test]
+    fn triple_backticks_on_one_line_are_inline_code() {
+        assert_eq!(
+            view("```js console.log(\"carro\")```"),
+            vec![(Kind::Marker, "```"), (Kind::Code, "js console.log(\"carro\")"), (Kind::Marker, "```")]
+        );
+        // It must not open a code block that swallows the following lines.
+        let v = view("```a b```
+next **b**");
+        assert!(v.contains(&(Kind::Bold, "b")));
+        assert!(!v.iter().any(|(k, _)| *k == Kind::CodeBlock));
+        assert_eq!(
+            view("x ``a`b`` y"),
+            vec![(Kind::Text, "x "), (Kind::Marker, "``"), (Kind::Code, "a`b"), (Kind::Marker, "``"), (Kind::Text, " y")]
+        );
+    }
+
+    #[test]
+    fn fences_close_only_on_a_matching_fence() {
+        let v = view("```js
+code
+```
+after");
+        assert_eq!(v[0], (Kind::Marker, "```js"));
+        assert!(v.contains(&(Kind::CodeBlock, "code")));
+        assert!(v.contains(&(Kind::Marker, "```")));
+        assert_eq!(*v.last().unwrap(), (Kind::Text, "after"));
+
+        // A shorter fence inside a longer one is just code; text after the closing fence is styled again.
+        let v = view("````
+```
+x
+````
+**b**");
+        assert!(v.contains(&(Kind::CodeBlock, "```")));
+        assert!(v.contains(&(Kind::Bold, "b")));
+
+        // A fence line with trailing text does not close the block.
+        let v = view("```
+``` not closing
+still code");
+        assert!(v.contains(&(Kind::CodeBlock, "``` not closing")));
+        assert!(v.contains(&(Kind::CodeBlock, "still code")));
     }
 
     #[test]
