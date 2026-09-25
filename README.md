@@ -9,6 +9,12 @@ A tiny, native notepad for Windows. Minimal, translucent, Markdown-friendly, sty
 - **Focus mode**: chrome hidden, centered column, everything but the current paragraph dimmed
 - Find, open/save, drag and drop, unsaved-changes prompt, CRLF and UTF-8 handled
 
+## Download
+
+Grab `jot.exe` (or the zip) from the [latest release](https://github.com/zeldxh/jot/releases/latest) and run it.
+It is a single file, no installer needed. Windows may show a SmartScreen warning because the exe is unsigned:
+choose **More info**, then **Run anyway**.
+
 ## Keys
 
 | Key | Action |
