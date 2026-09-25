@@ -7,6 +7,35 @@ pub const MIN_FONT_SIZE: f32 = 8.0;
 pub const MAX_FONT_SIZE: f32 = 72.0;
 pub const MIN_OPACITY: f32 = 0.3;
 
+/// When the tab bar is shown, like WezTerm's `hide_tab_bar_if_only_one_tab`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TabBar {
+    /// Only when more than one file is open.
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl TabBar {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Always,
+            Self::Always => Self::Never,
+            Self::Never => Self::Auto,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Always => "always",
+            Self::Never => "never",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Config {
@@ -17,6 +46,8 @@ pub struct Config {
     pub opacity: f32,
     pub word_wrap: bool,
     pub line_numbers: bool,
+    /// `auto` shows tabs only with more than one file open, `always` or `never`.
+    pub tab_bar: TabBar,
     /// Width of the text column in focus mode, in characters.
     pub focus_column: f32,
 }
@@ -29,6 +60,7 @@ impl Default for Config {
             opacity: 0.92,
             word_wrap: true,
             line_numbers: true,
+            tab_bar: TabBar::Auto,
             focus_column: 72.0,
         }
     }
@@ -106,6 +138,14 @@ mod tests {
         let c = Config::parse("font_size = 500.0\nopacity = 0.0");
         assert_eq!(c.font_size, MAX_FONT_SIZE);
         assert_eq!(c.opacity, MIN_OPACITY);
+    }
+
+    #[test]
+    fn tab_bar_setting() {
+        assert_eq!(Config::default().tab_bar, TabBar::Auto);
+        assert_eq!(Config::parse("tab_bar = \"always\"").tab_bar, TabBar::Always);
+        assert_eq!(Config::parse("tab_bar = \"nonsense\"").tab_bar, TabBar::Auto);
+        assert_eq!(TabBar::Auto.next().next().next(), TabBar::Auto);
     }
 
     #[test]
