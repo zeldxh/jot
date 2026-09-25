@@ -43,7 +43,11 @@ impl Config {
         self
     }
 
+    /// `JOT_CONFIG` overrides the location (used for testing without touching the real config).
     pub fn path() -> Option<PathBuf> {
+        if let Some(p) = std::env::var_os("JOT_CONFIG") {
+            return Some(PathBuf::from(p));
+        }
         let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
         Some(PathBuf::from(home).join(".config").join("jot").join("config.toml"))
     }
