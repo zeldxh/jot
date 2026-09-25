@@ -639,8 +639,6 @@ impl Jot {
             Some((msg, at)) if at.elapsed() < Duration::from_secs(4) => msg.clone(),
             _ => self.doc().path.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
         };
-        ui.painter().text(rect.left_center() + egui::vec2(12.0, 0.0), Align2::LEFT_CENTER, left, font.clone(), FAINT);
-
         let (line, col) = self.doc_mut().line_col(cursor_char);
         let words = self.doc().stats.1;
         let kind = if !self.doc().is_markdown() {
@@ -652,6 +650,17 @@ impl Jot {
         };
         let wrap = if self.cfg.word_wrap { "wrap" } else { "nowrap" };
         let right = format!("Ln {line}, Col {col}   {words} words   {kind}   {wrap}   F1 keys");
+
+        // The path is clipped so it can never run into the statistics on the right.
+        let right_w = ui.painter().layout_no_wrap(right.clone(), font.clone(), FAINT).size().x;
+        let clip = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - right_w - 36.0, rect.bottom()));
+        ui.painter().with_clip_rect(clip).text(
+            rect.left_center() + egui::vec2(12.0, 0.0),
+            Align2::LEFT_CENTER,
+            left,
+            font.clone(),
+            FAINT,
+        );
         ui.painter().text(rect.right_center() - egui::vec2(12.0, 0.0), Align2::RIGHT_CENTER, right, font, FAINT);
     }
 
