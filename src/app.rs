@@ -15,6 +15,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
+/// Above this size Markdown styling is skipped to keep editing fast.
+const LARGE_FILE_BYTES: usize = 1_000_000;
 const TITLE_BAR_HEIGHT: f32 = 28.0;
 const STATUS_BAR_HEIGHT: f32 = 24.0;
 const CFG_POLL: Duration = Duration::from_millis(1000);
@@ -65,7 +67,8 @@ pub struct Jot {
     pending_scroll: Option<usize>,
     pending_select: Option<(usize, usize)>,
     galley_cache: GalleyCache,
-    stats: (u64, usize),
+    stats: (u64, usize, usize),
+    cursor_cache: (u64, usize, (usize, usize)),
     status: Option<(String, Instant)>,
     window_title: String,
     editor_id: Id,
@@ -98,7 +101,8 @@ impl Jot {
             pending_scroll: None,
             pending_select: None,
             galley_cache: GalleyCache::default(),
-            stats: (0, 0),
+            stats: (0, 0, 1),
+            cursor_cache: (0, usize::MAX, (1, 1)),
             status: None,
             window_title: String::new(),
             editor_id: Id::new("jot-editor"),
@@ -136,6 +140,14 @@ impl Jot {
             .map_or_else(|| "untitled".to_owned(), |n| n.to_string_lossy().into_owned())
     }
 
+    /// Line and column of a cursor, recomputed only when the text or cursor changed.
+    fn line_col(&mut self, cursor_char: usize) -> (usize, usize) {
+        if self.cursor_cache.0 != self.text_hash || self.cursor_cache.1 != cursor_char {
+            self.cursor_cache = (self.text_hash, cursor_char, text_util::line_col(&self.text, cursor_char));
+        }
+        self.cursor_cache.2
+    }
+
     fn notify(&mut self, msg: impl Into<String>) {
         self.status = Some((msg.into(), Instant::now()));
     }
@@ -153,6 +165,8 @@ impl Jot {
                 self.set_document(text, Some(path), crlf);
                 if lossy {
                     self.notify("Invalid UTF-8 found, some characters were replaced");
+                } else if self.text.len() > LARGE_FILE_BYTES {
+                    self.notify("Large file: Markdown styling is off to keep editing fast");
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -478,8 +492,14 @@ impl Jot {
         };
         painter.text(rect.left_center() + egui::vec2(12.0, 0.0), Align2::LEFT_CENTER, left, font.clone(), FAINT);
 
-        let (line, col) = text_util::line_col(&self.text, cursor_char);
-        let kind = if self.is_markdown() { "md" } else { "txt" };
+        let (line, col) = self.line_col(cursor_char);
+        let kind = if !self.is_markdown() {
+            "txt"
+        } else if self.text.len() > LARGE_FILE_BYTES {
+            "md (plain, large file)"
+        } else {
+            "md"
+        };
         let wrap = if self.cfg.word_wrap { "wrap" } else { "nowrap" };
         let right = format!("Ln {line}, Col {col}   {} words   {kind}   {wrap}", self.stats.1);
         painter.text(rect.right_center() - egui::vec2(12.0, 0.0), Align2::RIGHT_CENTER, right, font, FAINT);
@@ -532,9 +552,9 @@ impl Jot {
             (g.size().x, g.size().y)
         });
 
-        let markdown = self.is_markdown();
+        let markdown = self.is_markdown() && self.text.len() <= LARGE_FILE_BYTES;
         let show_numbers = self.cfg.line_numbers && !self.focus;
-        let digits = text_util::line_count(&self.text).to_string().len().max(2);
+        let digits = self.stats.2.to_string().len().max(2);
         let gutter = if show_numbers { (char_w * digits as f32 + 20.0).ceil() } else { 0.0 };
         let wrap = self.cfg.word_wrap;
 
@@ -615,14 +635,17 @@ impl Jot {
                 }
 
                 if show_numbers {
-                    let current_line = text_util::line_col(&self.text, cursor_char).0;
+                    let current_line = self.line_col(cursor_char).0;
                     let painter = ui.painter_at(ui.clip_rect());
                     let num_font = FontId::new(size, FontFamily::Monospace);
                     let x = out.galley_pos.x - 10.0;
                     let mut line = 1;
                     let mut line_start = true;
+                    let clip = ui.clip_rect();
                     for row in &out.galley.rows {
-                        if line_start {
+                        let top = out.galley_pos.y + row.pos.y;
+                        let visible = top + row.size.y >= clip.top() && top <= clip.bottom();
+                        if line_start && visible {
                             let bottom = out.galley_pos.y + row.pos.y + row.size.y;
                             let color = if line == current_line { FG } else { FAINT };
                             painter.text(
@@ -678,9 +701,8 @@ impl eframe::App for Jot {
         self.sync_config(&ctx);
         self.shortcuts(&ctx);
         self.handle_window_events(&ctx);
-        self.text_hash = hash_of(&self.text);
-        if self.stats.0 != self.text_hash {
-            self.stats = (self.text_hash, text_util::word_count(&self.text));
+        if self.stats.0 != self.text_hash || self.stats.2 == 0 {
+            self.stats = (self.text_hash, text_util::word_count(&self.text), text_util::line_count(&self.text));
         }
 
         let title = format!("{}{} - jot", if self.dirty() { "* " } else { "" }, self.file_name());
