@@ -59,6 +59,7 @@ pub struct Jot {
     focus: bool,
     fullscreen: bool,
     force_close: bool,
+    first_frame: bool,
 
     find: Find,
     pending_scroll: Option<usize>,
@@ -92,6 +93,7 @@ impl Jot {
             focus: false,
             fullscreen: false,
             force_close: false,
+            first_frame: true,
             find: Find::default(),
             pending_scroll: None,
             pending_select: None,
@@ -267,10 +269,12 @@ impl Jot {
         if pressed(ctrl_alt, Key::ArrowUp) {
             self.cfg.opacity = (self.cfg.opacity + 0.05).min(1.0);
             self.touch_config();
+            self.notify(format!("Opacity {}%", (self.cfg.opacity * 100.0).round()));
         }
         if pressed(ctrl_alt, Key::ArrowDown) {
             self.cfg.opacity = (self.cfg.opacity - 0.05).max(MIN_OPACITY);
             self.touch_config();
+            self.notify(format!("Opacity {}%", (self.cfg.opacity * 100.0).round()));
         }
         if pressed(Modifiers::SHIFT, Key::F3) {
             self.step_match(false);
@@ -296,6 +300,8 @@ impl Jot {
             self.cfg.word_wrap = !self.cfg.word_wrap;
             self.touch_config();
             self.notify(if self.cfg.word_wrap { "Word wrap on" } else { "Word wrap off" });
+            // Windows also delivers the letter as text; keep it out of the document.
+            ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Text(t) if t.eq_ignore_ascii_case("z"))));
         }
         if pressed(Modifiers::NONE, Key::F11) {
             self.fullscreen = !self.fullscreen;
@@ -331,6 +337,7 @@ impl Jot {
         if (size - self.cfg.font_size).abs() > 0.01 {
             self.cfg.font_size = size;
             self.touch_config();
+            self.notify(format!("Font size {}", size.round()));
         }
     }
 
@@ -507,6 +514,11 @@ impl Jot {
 
             if resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 let backwards = ui.input(|i| i.modifiers.shift);
+                // The same Enter must not reach the editor and replace the selected match.
+                ui.input_mut(|i| {
+                    i.consume_key(Modifiers::NONE, Key::Enter);
+                    i.consume_key(Modifiers::SHIFT, Key::Enter);
+                });
                 self.step_match(!backwards);
             }
         });
@@ -585,8 +597,7 @@ impl Jot {
                 let out = TextEdit::multiline(&mut self.text)
                     .id(self.editor_id)
                     .font(font.clone())
-                    .frame(Frame::NONE)
-                    .margin(margin)
+                    .frame(Frame::NONE.inner_margin(margin))
                     .desired_width(ui.available_width())
                     .desired_rows(rows)
                     .lock_focus(true)
@@ -660,6 +671,10 @@ impl eframe::App for Jot {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
 
+        if self.first_frame {
+            self.first_frame = false;
+            ctx.memory_mut(|m| m.request_focus(self.editor_id));
+        }
         self.sync_config(&ctx);
         self.shortcuts(&ctx);
         self.handle_window_events(&ctx);

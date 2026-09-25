@@ -46,10 +46,6 @@ pub fn char_to_byte(text: &str, char_idx: usize) -> usize {
     text.char_indices().nth(char_idx).map_or(text.len(), |(b, _)| b)
 }
 
-pub fn byte_to_char(text: &str, byte: usize) -> usize {
-    text[..byte.min(text.len())].chars().count()
-}
-
 /// The blank-line-delimited paragraph around a byte position (or just the blank line itself).
 pub fn paragraph_range(text: &str, pos: usize) -> Range<usize> {
     let pos = pos.min(text.len());
@@ -145,7 +141,6 @@ mod tests {
     fn char_byte_conversions_with_unicode() {
         let t = "aéb";
         assert_eq!(char_to_byte(t, 2), 3);
-        assert_eq!(byte_to_char(t, 3), 2);
         assert_eq!(char_to_byte(t, 99), t.len());
     }
 
