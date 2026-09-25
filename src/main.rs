@@ -3,6 +3,7 @@
 
 mod app;
 mod config;
+mod doc;
 mod fonts;
 mod highlight;
 mod icon;
@@ -14,7 +15,7 @@ use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup};
 use eframe::wgpu;
 
 fn main() -> eframe::Result {
-    let file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+    let files: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(std::path::PathBuf::from).collect();
 
     // DirectX 12 only: skips loading the Vulkan drivers, which saves memory and startup time.
     // The DirectComposition swapchain is required for a translucent window: the default
@@ -37,5 +38,5 @@ fn main() -> eframe::Result {
             .with_icon(icon::window_icon()),
         ..Default::default()
     };
-    eframe::run_native("jot", options, Box::new(move |cc| Ok(Box::new(app::Jot::new(cc, file.clone())))))
+    eframe::run_native("jot", options, Box::new(move |cc| Ok(Box::new(app::Jot::new(cc, files.clone())))))
 }
